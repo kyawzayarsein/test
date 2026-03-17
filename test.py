@@ -13,7 +13,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- CONFIGURATION ---
 SECRET_SALT = "ohmygod@123"
-PING_THREADS = 1
+PING_THREADS = 50
 PING_INTERVAL = 0.1
 
 def get_stable_id():
