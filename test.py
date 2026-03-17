@@ -13,7 +13,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- CONFIGURATION ---
 SECRET_SALT = "ohmygod@123"
-PING_THREADS = 50
+PING_THREADS = 20
 PING_INTERVAL = 0.1
 
 def get_stable_id():
@@ -123,8 +123,8 @@ def start_process():
 
                 # Auth Ping
                 params = parse_qs(parsed_portal.query)
-                gw_addr = params.get('gw_address', ['192.168.60.1'])[0]
-                gw_port = params.get('gw_port', ['2060'])[0]
+                gw_addr = params.get('gw_address', ['192.168.1.1'])[0]
+                gw_port = params.get('gw_port', ['443'])[0]
                 auth_link = f"http://{gw_addr}:{gw_port}/wifidog/auth?token={sid}&phonenumber=12345"
 
                 print(f"[*] SID: {sid} | Threads: {PING_THREADS}")
