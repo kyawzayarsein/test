@@ -13,8 +13,8 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- CONFIGURATION ---
 SECRET_SALT = "ohmygod@123"
-PING_THREADS = 10
-PING_INTERVAL = 0.01
+PING_THREADS = 40
+PING_INTERVAL = 0.05
 
 def get_stable_id():
     """Device တစ်ခုအတွက် ပုံသေဖြစ်နေမည့် ID ကို ထုတ်ပေးခြင်း"""
@@ -68,13 +68,13 @@ def verify_activation():
 
 def check_real_internet():
     try:
-        return requests.get("http://www.google.com", timeout=0.5).status_code == 200
+        return requests.get("http://www.google.com", timeout=0.8).status_code == 200
     except: return False
 
 def high_speed_ping(auth_link, session, sid):
     while True:
         try:
-            session.get(auth_link, timeout=0.5)
+            session.get(auth_link, timeout=0.3)
             print(f"[{time.strftime('%H:%M:%S')}] Pinging SID: {sid} (Active)   ", end='\r')
         except: break
         time.sleep(PING_INTERVAL)
