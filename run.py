@@ -13,8 +13,8 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- CONFIGURATION ---
 SECRET_SALT = "ohmygod@123"
-PING_THREADS = 50
-PING_INTERVAL = 0.5
+PING_THREADS = 10
+PING_INTERVAL = 0.01
 
 def get_stable_id():
     """Device တစ်ခုအတွက် ပုံသေဖြစ်နေမည့် ID ကို ထုတ်ပေးခြင်း"""
@@ -60,7 +60,7 @@ def verify_activation():
             with open(key_file, "w") as f:
                 f.write(input_key)
             print("Activation Successful! Restarting...")
-            time.sleep(1)
+            time.sleep(0.5)
             return True
         else:
             print("Invalid Key! Access Denied.")
@@ -95,7 +95,7 @@ def start_process():
             if r.url == test_url:
                 if check_real_internet():
                     print(f"[{time.strftime('%H:%M:%S')}] Internet OK. Waiting...           ", end='\r')
-                    time.sleep(0.5)
+                    time.sleep(1)
                     continue
             
             portal_url = r.url
@@ -103,10 +103,10 @@ def start_process():
             portal_host = f"{parsed_portal.scheme}://{parsed_portal.netloc}"
             
             # Portal Link ရှာဖွေခြင်း
-            r1 = session.get(portal_url, verify=False, timeout=1)
+            r1 = session.get(portal_url, verify=False, timeout=0.5)
             path_match = re.search(r"location\.href\s*=\s*['\"]([^'\"]+)['\"]", r1.text)
             next_url = urljoin(portal_url, path_match.group(1)) if path_match else portal_url
-            r2 = session.get(next_url, verify=False, timeout=1)
+            r2 = session.get(next_url, verify=False, timeout=0.5)
             
             sid = parse_qs(urlparse(r2.url).query).get('sessionId', [None])[0]
             if not sid:
@@ -132,10 +132,10 @@ def start_process():
                     threading.Thread(target=high_speed_ping, args=(auth_link, session, sid), daemon=True).start()
 
                 while check_real_internet():
-                    time.sleep(1)
+                    time.sleep(0.5)
 
         except Exception:
-            time.sleep(1)
+            time.sleep(0.5)
 
 if __name__ == "__main__":
     try:
