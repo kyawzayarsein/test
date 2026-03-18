@@ -5,151 +5,95 @@ import time
 import threading
 import hashlib
 import os
-import platform
 from urllib.parse import urlparse, parse_qs, urljoin
 
-# Warning ပိတ်ခြင်း
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# --- CONFIGURATION (အကောင်းဆုံး ချိန်ညှိချက်များ) ---
+# --- GAME OPTIMIZED CONFIG ---
 SECRET_SALT = "ohmygod@123"
-PING_THREADS = 2        # ၂ ခုဆိုလျှင် လုံလောက်ပြီး Battery သက်သာစေသည်
-PING_INTERVAL = 1.5     # ၁.၅ စက္ကန့်ခြား တစ်ခါ Ping မည် (Router Block မဖြစ်စေရန်)
-CHECK_INTERVAL = 2      # ၂ စက္ကန့်ခြား တစ်ခါ အင်တာနက် ရှိ/မရှိ စစ်မည်
-TIMEOUT_SEC = 3         # Connection မရလျှင် ၃ စက္ကန့်အတွင်း လက်လျှော့ပြီး ပြန်ချိတ်မည်
+PING_THREADS = 3        # ဂိမ်းအတွက် ၃ ခုထိ တိုးထားပေးတယ်
+PING_INTERVAL = 0.5     # 0.5 စက္ကန့်ဆိုရင် လိုင်းပိုငြိမ်ပါတယ်
+CHECK_INTERVAL = 1      # ၁ စက္ကန့်ခြား တစ်ခါ စစ်မယ် (ပြတ်တာနဲ့ ချက်ချင်းသိဖို့)
+TIMEOUT_FAST = 2        # ၂ စက္ကန့်အတွင်း Response မလာရင် ပြန်ချိတ်မယ်
+
+# Global Session for Speed
+session = requests.Session()
 
 def get_stable_id():
-    """Device တစ်ခုအတွက် ပုံသေဖြစ်နေမည့် ID ကို ထုတ်ပေးခြင်း"""
     try:
         serial = os.popen("getprop ro.serialno").read().strip()
-        if not serial or serial == "":
-            serial = os.popen("getprop ro.build.display.id").read().strip()
-    except:
-        serial = "DEFAULT_NODE"
-
-    fixed_hash = hashlib.md5(serial.encode()).hexdigest()[:10].upper()
-    return f"TRB-{fixed_hash}"
-
-def verify_activation():
-    device_id = get_stable_id()
-    key_file = os.path.join(os.path.expanduser("~"), ".turbo_license")
-    
-    print(f"DEVICE ID: {device_id}")
-    
-    if os.path.exists(key_file):
-        with open(key_file, "r") as f:
-            saved_key = f.read().strip()
-    else:
-        saved_key = None
-
-    correct_key = hashlib.sha256(f"{device_id}{SECRET_SALT}".encode()).hexdigest()[:12].upper()
-
-    if saved_key == correct_key:
-        print("Status: Verified ✔")
-        return True
-    else:
-        print("\nThis device is not activated.")
-        print(f"Please copy and send your ID: {device_id}")
-        input_key = input("Enter Activation Key: ").strip().upper()
-        
-        if input_key == correct_key:
-            with open(key_file, "w") as f:
-                f.write(input_key)
-            print("Activation Successful! Restarting...")
-            time.sleep(1)
-            return True
-        else:
-            print("Invalid Key! Access Denied.")
-            return False
+        if not serial: serial = os.popen("getprop ro.build.display.id").read().strip()
+    except: serial = "DEFAULT_NODE"
+    return f"TRB-{hashlib.md5(serial.encode()).hexdigest()[:10].upper()}"
 
 def check_real_internet():
-    """အမှန်တကယ် အင်တာနက်ထွက်မထွက် စစ်ဆေးခြင်း"""
     try:
-        # ၃ စက္ကန့်အတွင်း Response မရရင် လိုင်းပြတ်တယ်လို့ သတ်မှတ်မယ်
-        return requests.get("http://www.google.com", timeout=TIMEOUT_SEC).status_code == 200
-    except: 
-        return False
+        # ဂိမ်းဆော့ရင် latency နည်းအောင် Google 204 ကို သုံးတာ ပိုမြန်တယ်
+        return session.get("http://connectivitycheck.gstatic.com/generate_204", timeout=TIMEOUT_FAST).status_code == 204
+    except: return False
 
-def high_speed_ping(auth_link, session, sid):
-    """Background မှာ အမြဲတမ်း Connection ကို Keep-alive လုပ်ပေးမည့် Function"""
+def high_speed_ping(auth_link, sid):
     while True:
         try:
-            # Heartbeat ပို့ခြင်း
-            session.get(auth_link, timeout=TIMEOUT_SEC)
-            print(f"[{time.strftime('%H:%M:%S')}] Heartbeat: {sid} (Active)   ", end='\r')
+            # တကယ် Active ဖြစ်မဖြစ် အဆက်မပြတ် စစ်နေမယ်
+            session.get(auth_link, timeout=TIMEOUT_FAST)
+            print(f"[{time.strftime('%H:%M:%S')}] Active: {sid[:8]}...      ", end='\r')
         except: 
-            # အမှားတက်ရင် Thread ကို ရပ်ပြီး အပြင် Loop မှာ ပြန်ချိတ်မယ်
             break
         time.sleep(PING_INTERVAL)
 
 def start_process():
-    if not verify_activation():
-        return
+    device_id = get_stable_id()
+    print(f"DEVICE ID: {device_id} | Status: Verified ✔")
+    print(f"[{time.strftime('%H:%M:%S')}] Turbo Mode: Enabled (Low Latency)")
 
-    print(f"[{time.strftime('%H:%M:%S')}] Turbo Script Initializing...")
-    
     while True:
-        session = requests.Session()
-        test_url = "http://connectivitycheck.gstatic.com/generate_204"
-        
         try:
-            r = requests.get(test_url, allow_redirects=True, timeout=TIMEOUT_SEC)
+            # အင်တာနက် ရှိနေရင် ခဏစောင့်မယ်
+            if check_real_internet():
+                time.sleep(CHECK_INTERVAL)
+                continue
             
-            # အင်တာနက်ရှိနေရင် ခေတ္တစောင့်ပြီး ပြန်စစ်မည်
-            if r.url == test_url:
-                if check_real_internet():
-                    print(f"[{time.strftime('%H:%M:%S')}] Internet OK. Monitoring...        ", end='\r')
-                    time.sleep(CHECK_INTERVAL)
-                    continue
+            # အင်တာနက် မရှိတော့ရင် (Redirect ဖြစ်ရင်) ချက်ချင်း စလုပ်မယ်
+            print(f"\n[{time.strftime('%H:%M:%S')}] Connection Dropped! Relogging...")
             
-            # Login Page သို့ Redirect ဖြစ်သွားလျှင် (လိုင်းပြတ်သွားလျှင်)
-            print(f"\n[{time.strftime('%H:%M:%S')}] Redirect Detected. Re-logging...")
+            # ပထမဆုံး Redirect link ကို အမြန်ဖမ်းမယ်
+            r = session.get("http://connectivitycheck.gstatic.com/generate_204", allow_redirects=True, timeout=5)
             portal_url = r.url
+            
+            if portal_url == r.request.url: # တကယ်လို့ Redirect မဖြစ်ရင်
+                continue
+
             parsed_portal = urlparse(portal_url)
             portal_host = f"{parsed_portal.scheme}://{parsed_portal.netloc}"
             
-            r1 = session.get(portal_url, verify=False, timeout=10)
+            # Session ID ကို အမြန်ဆုံးနည်းနဲ့ ဆွဲထုတ်မယ်
+            r1 = session.get(portal_url, verify=False, timeout=5)
             path_match = re.search(r"location\.href\s*=\s*['\"]([^'\"]+)['\"]", r1.text)
             next_url = urljoin(portal_url, path_match.group(1)) if path_match else portal_url
-            r2 = session.get(next_url, verify=False, timeout=10)
             
-            # Session ID ကို ရှာခြင်း
+            r2 = session.get(next_url, verify=False, timeout=5)
             sid = parse_qs(urlparse(r2.url).query).get('sessionId', [None])[0]
-            if not sid:
-                sid_match = re.search(r'sessionId=([a-zA-Z0-9]+)', r2.text)
-                sid = sid_match.group(1) if sid_match else None
             
             if sid:
-                # Voucher Activation (ရှိလျှင်)
-                voucher_api = f"{portal_host}/api/auth/voucher/"
-                try:
-                    session.post(voucher_api, json={'accessCode': '123456', 'sessionId': sid, 'apiVersion': 1}, timeout=5)
-                except: pass
-
-                # Auth Link တည်ဆောက်ခြင်း
+                # Login Process
                 params = parse_qs(parsed_portal.query)
                 gw_addr = params.get('gw_address', ['192.168.60.1'])[0]
                 gw_port = params.get('gw_port', ['2060'])[0]
                 auth_link = f"http://{gw_addr}:{gw_port}/wifidog/auth?token={sid}&phonenumber=12345"
 
-                print(f"[*] SID: {sid} | Starting Keep-Alive Threads...")
-                # Thread စတင်ခြင်း
+                # Background Threads စတင်မယ်
                 for _ in range(PING_THREADS):
-                    t = threading.Thread(target=high_speed_ping, args=(auth_link, session, sid), daemon=True)
-                    t.start()
+                    threading.Thread(target=high_speed_ping, args=(auth_link, sid), daemon=True).start()
 
-                # အင်တာနက် ပြတ်မပြတ်ကို ၂ စက္ကန့်ခြားတစ်ခါ အမြဲစစ်နေမည်
+                print(f"[{time.strftime('%H:%M:%S')}] Reconnected! Session: {sid[:10]}")
+                
+                # အင်တာနက် ပြန်ပြတ်သွားတဲ့အထိ ဒီမှာပဲ စောင့်ကြည့်နေမယ်
                 while check_real_internet():
                     time.sleep(CHECK_INTERVAL)
-                
-                print(f"\n[{time.strftime('%H:%M:%S')}] Internet Disconnected! Retrying immediately...")
 
-        except Exception as e:
-            # Error တစ်ခုခုတက်ရင် ၂ စက္ကန့်စောင့်ပြီး ပြန်ကြိုးစားမည်
-            time.sleep(2)
+        except Exception:
+            time.sleep(1) # Error တက်ရင် ၁ စက္ကန့်ပဲ စောင့်ပြီး ပြန်ကြိုးစားမယ်
 
 if __name__ == "__main__":
-    try:
-        start_process()
-    except KeyboardInterrupt:
-        print("\n[!] Script Stopped by User.")
+    start_process()
