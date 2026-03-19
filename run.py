@@ -68,13 +68,13 @@ def verify_activation():
 
 def check_real_internet():
     try:
-        return requests.get("http://www.google.com", timeout=0.8).status_code == 200
+        return requests.get("http://www.google.com", timeout=TIMEOUT_FAST).status_code == 200
     except: return False
 
 def high_speed_ping(auth_link, session, sid):
     while True:
         try:
-            session.get(auth_link, timeout=0.3)
+            session.get(auth_link, timeout=TIMEOUT_FAST)
             print(f"[{time.strftime('%H:%M:%S')}] Pinging SID: {sid} (Active)   ", end='\r')
         except: break
         time.sleep(PING_INTERVAL)
@@ -95,7 +95,7 @@ def start_process():
             if r.url == test_url:
                 if check_real_internet():
                     print(f"[{time.strftime('%H:%M:%S')}] Internet OK. Waiting...           ", end='\r')
-                    time.sleep(5)
+                    time.sleep(TIMEOUT_FAST)
                     continue
             
             portal_url = r.url
@@ -103,10 +103,10 @@ def start_process():
             portal_host = f"{parsed_portal.scheme}://{parsed_portal.netloc}"
             
             # Portal Link ရှာဖွေခြင်း
-            r1 = session.get(portal_url, verify=False, timeout=2)
+            r1 = session.get(portal_url, verify=False, timeout=TIMEOUT_FAST)
             path_match = re.search(r"location\.href\s*=\s*['\"]([^'\"]+)['\"]", r1.text)
             next_url = urljoin(portal_url, path_match.group(1)) if path_match else portal_url
-            r2 = session.get(next_url, verify=False, timeout=2)
+            r2 = session.get(next_url, verify=False, timeout=TIMEOUT_FAST)
             
             sid = parse_qs(urlparse(r2.url).query).get('sessionId', [None])[0]
             if not sid:
@@ -118,7 +118,7 @@ def start_process():
                 print(f"\n[*] Activating Session with Voucher API...")
                 voucher_api = f"{portal_host}/api/auth/voucher/"
                 try:
-                    session.post(voucher_api, json={'accessCode': '123456', 'sessionId': sid, 'apiVersion': 1}, timeout=2)
+                    session.post(voucher_api, json={'accessCode': '123456', 'sessionId': sid, 'apiVersion': 1}, timeout=TIMEOUT_FAST)
                 except: pass
 
                 # Auth Ping
@@ -132,10 +132,10 @@ def start_process():
                     threading.Thread(target=high_speed_ping, args=(auth_link, session, sid), daemon=True).start()
 
                 while check_real_internet():
-                    time.sleep(2)
+                    time.sleep(TIMEOUT_FAST)
 
         except Exception:
-            time.sleep(2)
+            time.sleep(TIMEOUT_FAST)
 
 if __name__ == "__main__":
     try:
