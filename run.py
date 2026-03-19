@@ -14,7 +14,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 SECRET_SALT = "ohmygod@123"
 PING_THREADS = 5        # Thread ပိုတိုးထားပါတယ်
 PING_INTERVAL = 0.1     # CPU မတက်အောင် နည်းနည်းလျှော့ထားပါတယ်
-TIMEOUT_FAST = 5        # *** ဒါထည့်ဖို့ မမေ့ပါနဲ့ ***
+TIMEOUT_FAST = 2        # *** ဒါထည့်ဖို့ မမေ့ပါနဲ့ ***
 
 def get_stable_id():
     """Device ID ထုတ်ပေးခြင်း (Android/Linux/Windows support)"""
