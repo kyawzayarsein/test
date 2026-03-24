@@ -1,26 +1,16 @@
 import asyncio
-import run as _turbo_core # .so ဖိုင်ကို load လုပ်ခြင်း
+import run 
 
-def start_process():
-    """ 
-    .so ဖိုင်ထဲမှ function များကို စုစည်းပြီး 
-    Process တစ်ခုလုံးကို စတင်ပေးမည့် function
-    """
-    async def main():
+async def start_app():
+    
+    is_verified = await run.verify_activation()
+    if is_verified:
         try:
-            # ၁။ Activation စစ်ဆေးခြင်း
-            if await _turbo_core.verify_activation():
-                print("[+] Activation Verified. Starting Engine...")
-                # ၂။ Main Engine ကို run ခြင်း
-                await _turbo_core.main_engine()
-            else:
-                print("[!] Activation Failed. Access Denied.")
-        except Exception as e:
-            print(f"[!] Error inside process: {e}")
+            
+            await run.main_engine()
+        except KeyboardInterrupt:
+            print("\nStopped by User.")
 
-    try:
-        # Asyncio event loop ကို စတင်ခြင်း
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n[!] Stopped by User.")
-        
+if __name__ == "__main__":
+    asyncio.run(start_app())
+    
