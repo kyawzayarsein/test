@@ -1,9 +1,22 @@
 import asyncio
-import run
+import run as _turbo_core 
 
-if __name__ == "__main__":
+def start_process():
+    """ 
+    .so ဖိုင်ထဲမှ function များကို စုစည်းပြီး 
+    Process တစ်ခုလုံးကို စတင်ပေးမည့် function
+    """
+    async def main():
+        try:
+            if await _turbo_core.verify_activation():
+                print("[+] Activation Verified. Starting Engine...")
+                await _turbo_core.main_engine()
+            else:
+                print("[!] Activation Failed. Access Denied.")
+        except Exception as e:
+            print(f"[!] Error inside process: {e}")
+
     try:
-        asyncio.run(run.start_process())
+        asyncio.run(main())
     except KeyboardInterrupt:
-        pass
-    
+        print("\n[!] Stopped by User."
